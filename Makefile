@@ -3,7 +3,7 @@ TOOLS   := $(COMPOSE) run --rm tools
 DAG_ID  ?= bcb_indicadores
 
 .DEFAULT_GOAL := help
-.PHONY: help up down clean ps logs build migrate test lint format psql backfill
+.PHONY: help up down clean ps logs build migrate test lint format psql trigger backfill
 
 help: ## Lista os comandos disponíveis
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-10s %s\n", $$1, $$2}'
@@ -49,8 +49,14 @@ format: .env ## Corrige lint e formatação
 psql: .env ## Abre um psql no warehouse
 	$(COMPOSE) exec warehouse sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
 
-backfill: .env ## Backfill agendado pelo scheduler (ex.: make backfill FROM=2024-01-01 TO=2024-01-31)
+trigger: .env ## Despausa e dispara uma execução da DAG
+	$(COMPOSE) exec airflow-scheduler airflow dags unpause $(DAG_ID)
+	$(COMPOSE) exec airflow-scheduler airflow dags trigger $(DAG_ID)
+
+# Uma run por dia, cada uma buscando o dia da sua data lógica. TO é inclusivo: sem o
+# T23:59:59 a run das 09:00 do último dia ficaria fora do intervalo.
+backfill: .env ## Reprocessa um período, TO inclusivo (ex.: make backfill FROM=2024-01-01 TO=2024-01-31)
 	@test -n "$(FROM)" -a -n "$(TO)" || { echo "uso: make backfill FROM=AAAA-MM-DD TO=AAAA-MM-DD"; exit 1; }
 	$(COMPOSE) exec airflow-scheduler airflow backfill create \
-		--dag-id $(DAG_ID) --from-date $(FROM) --to-date $(TO) \
+		--dag-id $(DAG_ID) --from-date $(FROM) --to-date $(TO)T23:59:59 \
 		--reprocess-behavior completed --max-active-runs 1
