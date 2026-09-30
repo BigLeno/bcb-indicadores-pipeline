@@ -25,6 +25,10 @@ x-airflow-common: &airflow-common
     WAREHOUSE_DB: ${WAREHOUSE_DB:?defina no .env}
     WAREHOUSE_USER: ${WAREHOUSE_USER:?defina no .env}
     WAREHOUSE_PASSWORD: ${WAREHOUSE_PASSWORD:?defina no .env}
+    SGS_TIMEOUT_SECONDS: ${SGS_TIMEOUT_SECONDS:-60}
+    SGS_MAX_ATTEMPTS: ${SGS_MAX_ATTEMPTS:-4}
+    SGS_BACKOFF_SECONDS: ${SGS_BACKOFF_SECONDS:-2}
+    SGS_WINDOW_YEARS: ${SGS_WINDOW_YEARS:-5}
     MIGRATIONS_DIR: /opt/airflow/project/sql/migrations
     SERIES_CONFIG_PATH: /opt/airflow/project/config/series.yaml
   volumes:

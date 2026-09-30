@@ -21,6 +21,32 @@ def _require(env: Mapping[str, str], name: str) -> str:
 
 
 @dataclass(frozen=True)
+class SgsSettings:
+    """Parâmetros de acesso à API SGS. Todos têm padrão; ajuste por `SGS_*`."""
+
+    base_url: str = "https://api.bcb.gov.br/dados/serie"
+    timeout_seconds: float = 60.0
+    max_attempts: int = 4
+    backoff_seconds: float = 2.0
+    # A API aceita até 10 anos, mas 10 anos de série diária levam ~20 s e o gateway
+    # corta em ~30 s. Com 5 anos cada consulta fica longe do limite.
+    window_years: int = 5
+
+    @classmethod
+    def from_env(cls, env: Mapping[str, str] | None = None) -> SgsSettings:
+        """Lê as variáveis `SGS_*`, caindo nos padrões quando ausentes."""
+        env = os.environ if env is None else env
+        default = cls()
+        return cls(
+            base_url=env.get("SGS_BASE_URL", default.base_url),
+            timeout_seconds=float(env.get("SGS_TIMEOUT_SECONDS", default.timeout_seconds)),
+            max_attempts=int(env.get("SGS_MAX_ATTEMPTS", default.max_attempts)),
+            backoff_seconds=float(env.get("SGS_BACKOFF_SECONDS", default.backoff_seconds)),
+            window_years=int(env.get("SGS_WINDOW_YEARS", default.window_years)),
+        )
+
+
+@dataclass(frozen=True)
 class WarehouseSettings:
     """Credenciais do Postgres do pipeline (separado do metadata DB do Airflow)."""
 
