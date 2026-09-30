@@ -1,0 +1,33 @@
+# Séries da API SGS do Banco Central carregadas pelo pipeline.
+# Cada série vira uma task mapeada na DAG. Para adicionar uma, basta incluí-la aqui.
+# Catálogo de códigos: https://www3.bcb.gov.br/sgspub
+
+# Início da carga histórica quando a série ainda não tem dados no staging.
+# Pode ser sobrescrito por série com `inicio`.
+carga_inicial: 2000-01-01
+
+series:
+  - codigo: 11
+    nome: Taxa Selic diária
+    periodicidade: diaria
+    unidade: "% a.d."
+
+  - codigo: 432
+    nome: Meta Selic definida pelo Copom
+    periodicidade: diaria
+    unidade: "% a.a."
+
+  - codigo: 12
+    nome: Taxa CDI diária
+    periodicidade: diaria
+    unidade: "% a.d."
+
+  - codigo: 433
+    nome: IPCA - variação mensal
+    periodicidade: mensal
+    unidade: "% a.m."
+
+  - codigo: 1
+    nome: Dólar comercial (venda)
+    periodicidade: diaria
+    unidade: "R$/US$"
