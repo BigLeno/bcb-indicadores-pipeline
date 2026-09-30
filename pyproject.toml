@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bcb-pipeline"
+version = "0.1.0"
+description = "Pipeline de indicadores econômicos da API SGS do Banco Central do Brasil."
+readme = "README.md"
+requires-python = ">=3.12"
+# Versões alinhadas ao arquivo de constraints do Airflow 3.3.2 (Python 3.12).
+dependencies = [
+    "psycopg[binary]>=3.3,<4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.1",
+    "ruff==0.16.9",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/bcb_pipeline"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests", "dags"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # bugbear
+    "UP",  # pyupgrade
+    "SIM", # simplificações
+    "DTZ", # datetimes sem timezone
+    "PT",  # estilo pytest
+    "RUF", # regras do próprio ruff
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "integration: testes que precisam de um Postgres real",
+]

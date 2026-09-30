@@ -1,0 +1,25 @@
+# Segredos e configuração local
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+build/
+dist/
+
+# Ferramentas
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Airflow (gerados em runtime)
+logs/
+airflow.cfg
+airflow.db
+
+# Editores
+.idea/
+.vscode/
