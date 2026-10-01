@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import date
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Literal
 
@@ -20,6 +21,14 @@ class ConfigError(ValueError):
 
 
 @dataclass(frozen=True)
+class Faixa:
+    """Intervalo [minimo, maximo] de valores plausíveis, usado pela checagem de qualidade."""
+
+    minimo: Decimal
+    maximo: Decimal
+
+
+@dataclass(frozen=True)
 class SerieConfig:
     """Uma série SGS configurada no pipeline."""
 
@@ -28,15 +37,46 @@ class SerieConfig:
     periodicidade: Periodicidade
     unidade: str
     inicio: date
+    faixa: Faixa | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Versão serializável (XCom do Airflow só aceita tipos simples)."""
-        return {**asdict(self), "inicio": self.inicio.isoformat()}
+        return {
+            "codigo": self.codigo,
+            "nome": self.nome,
+            "periodicidade": self.periodicidade,
+            "unidade": self.unidade,
+            "inicio": self.inicio.isoformat(),
+            "faixa": (
+                [str(self.faixa.minimo), str(self.faixa.maximo)] if self.faixa is not None else None
+            ),
+        }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SerieConfig:
         """Inverso de `to_dict`."""
-        return cls(**{**data, "inicio": date.fromisoformat(data["inicio"])})
+        faixa = data.get("faixa")
+        return cls(
+            codigo=data["codigo"],
+            nome=data["nome"],
+            periodicidade=data["periodicidade"],
+            unidade=data["unidade"],
+            inicio=date.fromisoformat(data["inicio"]),
+            faixa=Faixa(Decimal(faixa[0]), Decimal(faixa[1])) if faixa else None,
+        )
+
+
+def _parse_faixa(raw: Any, codigo: Any) -> Faixa | None:
+    if raw is None:
+        return None
+    try:
+        # str() antes de Decimal evita herdar o erro de representação do float do YAML.
+        faixa = Faixa(Decimal(str(raw["min"])), Decimal(str(raw["max"])))
+    except (TypeError, KeyError, InvalidOperation) as exc:
+        raise ConfigError(f"`faixa` da série {codigo} deve ser {{min: N, max: N}}") from exc
+    if faixa.minimo >= faixa.maximo:
+        raise ConfigError(f"`faixa` da série {codigo}: min deve ser menor que max")
+    return faixa
 
 
 def _parse_serie(raw: dict[str, Any], carga_inicial: date) -> SerieConfig:
@@ -56,6 +96,7 @@ def _parse_serie(raw: dict[str, Any], carga_inicial: date) -> SerieConfig:
         periodicidade=raw["periodicidade"],
         unidade=str(raw["unidade"]),
         inicio=inicio,
+        faixa=_parse_faixa(raw.get("faixa"), raw["codigo"]),
     )
 
 

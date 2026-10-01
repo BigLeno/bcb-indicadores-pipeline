@@ -1,9 +1,10 @@
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
-from bcb_pipeline.config import ConfigError, SerieConfig, load_series
+from bcb_pipeline.config import ConfigError, Faixa, SerieConfig, load_series
 
 REPO_CONFIG = Path(__file__).resolve().parents[2] / "config" / "series.yaml"
 
@@ -18,6 +19,19 @@ def test_repository_config_has_the_five_initial_series() -> None:
     series = load_series(REPO_CONFIG)
 
     assert sorted(s.codigo for s in series) == [1, 11, 12, 432, 433]
+    assert all(s.faixa is not None for s in series)
+
+
+def test_faixa_is_parsed_as_exact_decimal(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "carga_inicial: 2000-01-01\nseries:\n"
+        "  - {codigo: 1, nome: a, periodicidade: diaria, unidade: x, faixa: {min: 0, max: 0.15}}",
+    )
+
+    (serie,) = load_series(path)
+
+    assert serie.faixa == Faixa(Decimal("0"), Decimal("0.15"))
 
 
 def test_serie_inherits_carga_inicial_unless_overridden(tmp_path: Path) -> None:
@@ -54,6 +68,16 @@ series:
             "repetido",
         ),
         ("carga_inicial: 2000-01-01\nseries:\n  - {codigo: 1}", "sem os campos"),
+        (
+            "carga_inicial: 2000-01-01\nseries:\n"
+            "  - {codigo: 1, nome: a, periodicidade: diaria, unidade: x, faixa: {min: 5, max: 1}}",
+            "min deve ser menor",
+        ),
+        (
+            "carga_inicial: 2000-01-01\nseries:\n"
+            "  - {codigo: 1, nome: a, periodicidade: diaria, unidade: x, faixa: [1, 2]}",
+            "faixa",
+        ),
     ],
 )
 def test_invalid_config_is_rejected(tmp_path: Path, conteudo: str, erro: str) -> None:
@@ -61,7 +85,8 @@ def test_invalid_config_is_rejected(tmp_path: Path, conteudo: str, erro: str) ->
         load_series(_write(tmp_path, conteudo))
 
 
-def test_serie_round_trips_through_xcom_dict() -> None:
-    serie = SerieConfig(11, "Selic", "diaria", "% a.d.", date(2000, 1, 1))
+@pytest.mark.parametrize("faixa", [None, Faixa(Decimal("0"), Decimal("0.15"))])
+def test_serie_round_trips_through_xcom_dict(faixa: Faixa | None) -> None:
+    serie = SerieConfig(11, "Selic", "diaria", "% a.d.", date(2000, 1, 1), faixa)
 
     assert SerieConfig.from_dict(serie.to_dict()) == serie
