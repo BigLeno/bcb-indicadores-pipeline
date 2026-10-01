@@ -11,7 +11,7 @@ from typing import Any
 import psycopg
 import structlog
 
-from bcb_pipeline import loader
+from bcb_pipeline import loader, marts, quality
 from bcb_pipeline.config import SerieConfig, load_series
 from bcb_pipeline.settings import WarehouseSettings
 from bcb_pipeline.sgs_client import SgsClient
@@ -131,3 +131,26 @@ def carregar_staging(serie_id: int, raw_ids: Sequence[int]) -> dict[str, int]:
     }
     log.info("staging_carregado", **stats)
     return stats
+
+
+def checar_qualidade(serie: SerieConfig, hoje: date) -> dict[str, int]:
+    """Roda as checagens da série no staging; falha com `QualityCheckError` se houver violação."""
+    with _conectar() as conn:
+        resultados = quality.executar_checagens(conn, serie, hoje)
+    violacoes = {r.nome: r.violacoes for r in resultados}
+    logger.info(
+        "qualidade_verificada",
+        serie_id=serie.codigo,
+        aprovada=all(r.ok for r in resultados),
+        violacoes=violacoes,
+    )
+    quality.exigir_aprovacao(serie, resultados)
+    return violacoes
+
+
+def atualizar_marts() -> dict[str, int]:
+    """Refresh de todos os marts; devolve a quantidade de linhas de cada um."""
+    with _conectar() as conn:
+        linhas = marts.atualizar(conn)
+    logger.info("marts_atualizados", linhas=linhas)
+    return linhas
