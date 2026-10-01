@@ -168,7 +168,10 @@ services:
       - ./config:/opt/airflow/project/config:ro
       - ./tests:/opt/airflow/project/tests
       - ./pyproject.toml:/opt/airflow/project/pyproject.toml:ro
-    depends_on: {}
+    # Os testes de integração criam um banco descartável neste Postgres.
+    depends_on:
+      warehouse:
+        condition: service_healthy
 
 volumes:
   airflow-db-data:

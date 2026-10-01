@@ -1,5 +1,6 @@
 COMPOSE ?= docker compose
 TOOLS   := $(COMPOSE) run --rm tools
+NO_DB   := $(COMPOSE) run --rm --no-deps tools
 DAG_ID  ?= bcb_indicadores
 
 .DEFAULT_GOAL := help
@@ -37,14 +38,14 @@ build: .env ## Reconstrói as imagens
 migrate: .env ## Aplica as migrations pendentes no warehouse
 	$(COMPOSE) run --rm warehouse-migrate
 
-test: .env ## Roda o pytest no container de ferramentas
+test: .env ## Testes unitários + integração (sobe o warehouse; ex.: make test ARGS="-m 'not integration'")
 	$(TOOLS) pytest $(ARGS)
 
 lint: .env ## ruff check + verificação de formatação
-	$(TOOLS) sh -c "ruff check . && ruff format --check ."
+	$(NO_DB) sh -c "ruff check . && ruff format --check ."
 
 format: .env ## Corrige lint e formatação
-	$(TOOLS) sh -c "ruff check --fix . && ruff format ."
+	$(NO_DB) sh -c "ruff format . && ruff check --fix ."
 
 psql: .env ## Abre um psql no warehouse
 	$(COMPOSE) exec warehouse sh -c 'psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"'
