@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Um push novo cancela a execução anterior do mesmo branch.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      # Os mesmos hooks do commit local: ruff, formatação, YAML/TOML, chaves privadas.
+      - name: pre-commit
+        run: |
+          pip install pre-commit==4.6.2
+          pre-commit run --all-files --show-diff-on-failure
+
+      - name: docker compose config
+        run: cp .env.example .env && docker compose config --quiet
+
+  test:
+    name: Testes (unitários + integração)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: bcb
+          POSTGRES_PASSWORD: bcb
+          POSTGRES_DB: bcb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bcb -d bcb"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Credenciais do Postgres efêmero do CI; os testes criam e apagam um banco próprio.
+      WAREHOUSE_HOST: localhost
+      WAREHOUSE_PORT: "5432"
+      WAREHOUSE_DB: bcb
+      WAREHOUSE_USER: bcb
+      WAREHOUSE_PASSWORD: bcb
+      AIRFLOW_HOME: /tmp/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      # Mesma versão do Airflow e mesmas constraints da imagem: a versão vem do Dockerfile.
+      - name: Instalar dependências
+        run: |
+          AIRFLOW_VERSION=$(sed -n 's/^ARG AIRFLOW_VERSION=//p' Dockerfile)
+          echo "Airflow ${AIRFLOW_VERSION}"
+          pip install "apache-airflow==${AIRFLOW_VERSION}" -e ".[dev]" \
+            --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-3.12.txt"
+
+      - name: pytest
+        run: pytest
