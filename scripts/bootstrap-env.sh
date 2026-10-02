@@ -24,6 +24,8 @@ sed \
     -e "s|^AIRFLOW_JWT_SECRET=.*|AIRFLOW_JWT_SECRET=$(random_hex)|" \
     -e "s|^AIRFLOW_DB_PASSWORD=.*|AIRFLOW_DB_PASSWORD=$(random_hex)|" \
     -e "s|^WAREHOUSE_PASSWORD=.*|WAREHOUSE_PASSWORD=$(random_hex)|" \
+    -e "s|^DJANGO_SECRET_KEY=.*|DJANGO_SECRET_KEY=$(openssl rand -hex 32)|" \
+    -e "s|^API_DB_PASSWORD=.*|API_DB_PASSWORD=$(random_hex)|" \
     .env.example > .env
 chmod 600 .env
 

@@ -4,7 +4,7 @@ NO_DB   := $(COMPOSE) run --rm --no-deps tools
 DAG_ID  ?= bcb_indicadores
 
 .DEFAULT_GOAL := help
-.PHONY: help up down clean ps logs build migrate test lint format psql trigger backfill
+.PHONY: help up down clean ps logs build migrate test test-pipeline test-api lint format psql trigger backfill
 
 help: ## Lista os comandos disponíveis
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  %-10s %s\n", $$1, $$2}'
@@ -18,6 +18,7 @@ logs/:
 up: .env logs/ ## Sobe Airflow + Postgres e espera ficarem saudáveis
 	$(COMPOSE) up -d --build --wait
 	@echo "Airflow UI: http://localhost:$$(grep -E '^AIRFLOW_HOST_PORT=' .env | cut -d= -f2)"
+	@echo "API docs:   http://localhost:$$(grep -E '^API_HOST_PORT=' .env | cut -d= -f2)/api/docs/"
 
 down: ## Para os containers (mantém os dados)
 	$(COMPOSE) down
@@ -33,13 +34,18 @@ logs: ## Acompanha os logs (ex.: make logs S=airflow-scheduler)
 
 build: .env ## Reconstrói as imagens
 	$(COMPOSE) build
-	$(COMPOSE) --profile tools build tools
+	$(COMPOSE) --profile tools build tools api-tools
 
 migrate: .env ## Aplica as migrations pendentes no warehouse
 	$(COMPOSE) run --rm warehouse-migrate
 
-test: .env ## Testes unitários + integração (sobe o warehouse; ex.: make test ARGS="-m 'not integration'")
+test: test-pipeline test-api ## Todos os testes (pipeline + API)
+
+test-pipeline: .env ## Testes do pipeline: unitários + integração (ex.: make test-pipeline ARGS="-m 'not integration'")
 	$(TOOLS) pytest $(ARGS)
+
+test-api: .env ## Testes da API Django contra o schema real do warehouse
+	$(COMPOSE) run --rm api-tools pytest $(ARGS)
 
 lint: .env ## ruff check + verificação de formatação
 	$(NO_DB) sh -c "ruff check . && ruff format --check ."

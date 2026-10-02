@@ -98,10 +98,15 @@ services:
       airflow-db:
         condition: service_healthy
 
-  # Aplica sql/migrations no warehouse antes de o Airflow começar a rodar tasks.
+  # Aplica sql/migrations no warehouse antes de o Airflow começar a rodar tasks
+  # e garante o usuário só de leitura da API.
   warehouse-migrate:
     <<: *airflow-common
     command: python -m bcb_pipeline.migrate
+    environment:
+      <<: *airflow-common-env
+      API_DB_USER: ${API_DB_USER:?defina no .env}
+      API_DB_PASSWORD: ${API_DB_PASSWORD:?defina no .env}
     depends_on:
       warehouse:
         condition: service_healthy
@@ -167,8 +172,60 @@ services:
       - ./sql:/opt/airflow/project/sql:ro
       - ./config:/opt/airflow/project/config:ro
       - ./tests:/opt/airflow/project/tests
+      - ./api:/opt/airflow/project/api
       - ./pyproject.toml:/opt/airflow/project/pyproject.toml:ro
     # Os testes de integração criam um banco descartável neste Postgres.
+    depends_on:
+      warehouse:
+        condition: service_healthy
+
+  # API REST (Django/DRF) sobre os marts, conectada com o usuário só de leitura.
+  api:
+    build:
+      context: ./api
+      target: runtime
+    image: bcb-indicadores-api:local
+    environment: &api-env
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?defina no .env}
+      DJANGO_DEBUG: "false"
+      DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1
+      API_DB_HOST: warehouse
+      API_DB_PORT: "5432"
+      API_DB_NAME: ${WAREHOUSE_DB}
+      API_DB_USER: ${API_DB_USER}
+      API_DB_PASSWORD: ${API_DB_PASSWORD}
+    ports:
+      - "127.0.0.1:${API_HOST_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    depends_on:
+      warehouse:
+        condition: service_healthy
+      warehouse-migrate:
+        condition: service_completed_successfully
+
+  # Testes da API (make test-api). Conecta como dono do warehouse, porque o
+  # pytest-django precisa criar o banco de teste.
+  api-tools:
+    build:
+      context: ./api
+      target: dev
+    image: bcb-indicadores-api:dev
+    profiles: [tools]
+    user: "${AIRFLOW_UID:-50000}"  # grava cache do pytest na pasta montada com o seu UID
+    environment:
+      <<: *api-env
+      API_DB_USER: ${WAREHOUSE_USER}
+      API_DB_PASSWORD: ${WAREHOUSE_PASSWORD}
+    volumes:
+      - ./api:/app
+      - ./sql:/sql:ro
+    command: pytest
     depends_on:
       warehouse:
         condition: service_healthy
