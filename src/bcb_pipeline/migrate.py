@@ -16,6 +16,7 @@ from pathlib import Path
 
 import psycopg
 
+from bcb_pipeline.acesso import garantir_usuario_leitura
 from bcb_pipeline.settings import WarehouseSettings
 
 logger = logging.getLogger(__name__)
@@ -103,11 +104,15 @@ def main() -> None:
     settings = WarehouseSettings.from_env()
     with psycopg.connect(settings.conninfo) as conn:
         applied = apply(conn, migrations)
-    logger.info(
-        "migrations concluídas: %d aplicadas agora, %d no total",
-        len(applied),
-        len(migrations),
-    )
+        logger.info(
+            "migrations concluídas: %d aplicadas agora, %d no total",
+            len(applied),
+            len(migrations),
+        )
+        usuario, senha = os.environ.get("API_DB_USER"), os.environ.get("API_DB_PASSWORD")
+        if usuario and senha:
+            criado = garantir_usuario_leitura(conn, usuario, senha)
+            logger.info("usuário de leitura da API %s: %s", "criado" if criado else "ok", usuario)
 
 
 if __name__ == "__main__":
