@@ -28,7 +28,7 @@ packages = ["src/bcb_pipeline"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["src", "tests", "dags"]
+src = ["src", "tests", "dags", "api"]
 
 [tool.ruff.lint]
 select = [
@@ -43,6 +43,11 @@ select = [
     "PT",  # estilo pytest
     "RUF", # regras do próprio ruff
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# Django/DRF declaram configuração em atributos de classe mutáveis (Meta.ordering,
+# fields, filter_backends); a regra só gera ruído nesse idioma.
+"api/**" = ["RUF012"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

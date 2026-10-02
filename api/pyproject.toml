@@ -1,0 +1,34 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "bcb-api"
+version = "0.1.0"
+description = "API REST (somente leitura) dos marts do pipeline bcb-indicadores."
+requires-python = ">=3.12"
+# Django 5.2 LTS: é a versão que DRF, drf-spectacular, django-filter e pytest-django
+# declaram suportar juntos (o drf-spectacular 0.30 ainda não lista o Django 6.1).
+dependencies = [
+    "Django>=5.2.17,<5.3",
+    "djangorestframework>=3.18,<3.19",
+    "drf-spectacular>=0.30,<0.31",
+    "django-filter>=26.1,<27",
+    "psycopg[binary]>=3.3,<4",
+    "gunicorn>=26,<27",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.1",
+    "pytest-django>=4.14",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["config", "indicadores"]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --import-mode=importlib"
+pythonpath = ["."]
