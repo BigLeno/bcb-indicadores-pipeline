@@ -155,3 +155,15 @@ def test_openapi_schema_and_docs(client: APIClient) -> None:
     assert {"serie", "data_inicio", "data_fim", "page", "page_size", "ordering"} <= parametros
     assert docs.status_code == 200
     assert b"swagger" in docs.content.lower()
+
+
+def test_openapi_describes_the_key_in_detail_urls(client: APIClient) -> None:
+    paths = client.get("/api/schema/?format=json").json()["paths"]
+
+    def descricao(caminho: str) -> str:
+        (parametro,) = (p for p in paths[caminho]["get"]["parameters"] if p["in"] == "path")
+        return parametro["description"]
+
+    assert "Fins de semana" in descricao("/api/marts/dolar-diario/{data}/")
+    assert "AAAA-MM-01" in descricao("/api/marts/ipca-mensal/{mes}/")
+    assert "Código SGS" in descricao("/api/series/{serie_id}/")

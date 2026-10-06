@@ -1,5 +1,11 @@
 from django.db import connection
-from drf_spectacular.utils import extend_schema, inline_serializer
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    extend_schema,
+    extend_schema_view,
+    inline_serializer,
+)
 from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -19,7 +25,23 @@ from indicadores.serializers import (
 # Datas nas URLs de detalhe dos marts: /api/marts/ipca-mensal/2024-12-01/
 DATA_NA_URL = r"\d{4}-\d{2}-\d{2}"
 
+# Sem isto, o drf-spectacular descreve a chave da URL com um texto genérico
+# ("Um valor único que identifica este ...").
+DESCRICAO_CHAVE = {
+    "data": "Data da cotação (AAAA-MM-DD). Fins de semana e feriados não têm cotação.",
+    "mes": "Mês de referência, sempre no dia 1 (AAAA-MM-01, ex.: 2024-12-01).",
+}
 
+
+def _chave_na_url(nome: str, tipo: OpenApiTypes, descricao: str) -> OpenApiParameter:
+    return OpenApiParameter(nome, tipo, OpenApiParameter.PATH, description=descricao)
+
+
+@extend_schema_view(
+    retrieve=extend_schema(
+        parameters=[_chave_na_url("serie_id", OpenApiTypes.INT, "Código SGS da série (ex.: 433).")]
+    )
+)
 class SerieViewSet(viewsets.ReadOnlyModelViewSet):
     """Catálogo das séries carregadas pelo pipeline."""
 
@@ -50,7 +72,8 @@ def _mart(modelo, serializer, campo: str, descricao: str) -> type[viewsets.ReadO
         lookup_value_regex = DATA_NA_URL
 
     Mart.__name__ = f"{modelo.__name__}ViewSet"
-    return Mart
+    chave = _chave_na_url(campo, OpenApiTypes.DATE, DESCRICAO_CHAVE[campo])
+    return extend_schema_view(retrieve=extend_schema(parameters=[chave]))(Mart)
 
 
 IpcaMensalViewSet = _mart(
