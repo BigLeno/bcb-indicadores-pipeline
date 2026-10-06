@@ -1,0 +1,5 @@
+# LF em todas as plataformas: scripts, Dockerfiles e SQL rodam em containers Linux,
+# e um CRLF vindo de um checkout no Windows quebra o shell ("bad interpreter").
+* text=auto eol=lf
+
+*.png binary
