@@ -11,9 +11,11 @@ from typing import Any
 
 import pendulum
 from airflow.sdk import dag, get_current_context, task
+from airflow.sdk.exceptions import AirflowFailException
 
 from bcb_pipeline import pipeline
 from bcb_pipeline.config import SerieConfig
+from bcb_pipeline.sgs_client import SgsResponseError
 
 TZ = "America/Sao_Paulo"
 
@@ -63,12 +65,17 @@ def bcb_indicadores() -> None:
                 _data_local(context["data_interval_start"]),
                 _data_local(context["data_interval_end"]),
             )
-        resultado = pipeline.extrair_serie(
-            SerieConfig.from_dict(serie),
-            fim=_data_local(context.get("data_interval_end")),
-            run_id=dag_run.run_id,
-            backfill=backfill,
-        )
+        try:
+            resultado = pipeline.extrair_serie(
+                SerieConfig.from_dict(serie),
+                fim=_data_local(context.get("data_interval_end")),
+                run_id=dag_run.run_id,
+                backfill=backfill,
+            )
+        except SgsResponseError as exc:
+            # Resposta definitiva da API (4xx em JSON, formato inesperado): os retries do
+            # Airflow só adiariam a falha. As transitórias já foram retentadas pelo client.
+            raise AirflowFailException(str(exc)) from exc
         return {**asdict(resultado), "serie": serie}
 
     @task(map_index_template="{{ serie_label }}")
