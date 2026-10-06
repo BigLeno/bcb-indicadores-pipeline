@@ -5,6 +5,7 @@
 ![Airflow 3.3](https://img.shields.io/badge/airflow-3.3-017CEE)
 ![PostgreSQL 17](https://img.shields.io/badge/postgres-17-336791)
 ![Django 5.2 LTS](https://img.shields.io/badge/django-5.2%20LTS-0C4B33)
+[![Licença MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-green)](LICENSE)
 
 Pipeline de dados que ingere séries econômicas da **API pública SGS do Banco Central do
 Brasil**, organiza os dados em camadas no PostgreSQL e os expõe numa **API REST** documentada.
@@ -197,7 +198,7 @@ pelo código e pelo nome da série.
 |---|---|---|
 | **Incremental pela última data carregada (inclusive)** em vez de pela data da run | se recupera sozinho de dias perdidos e pega revisões do último ponto | sempre rebusca um dia, coberto pelo upsert |
 | **`catchup=False`** e carga histórica pela lógica incremental | uma run carrega 26 anos (cerca de 1 min) em vez de criar milhares de runs | o backfill fica explícito (`make backfill`) |
-| **Retry em duas camadas:** client (4 tentativas, backoff exponencial com jitter, respeita `Retry-After`) e Airflow (3 retries, backoff de até 15 min) | falhas curtas se resolvem dentro da task; indisponibilidades longas, entre tentativas | o pior caso de espera é maior |
+| **Retry em duas camadas:** client (4 tentativas, backoff exponencial com jitter, respeita `Retry-After`) e Airflow (3 retries, backoff de até 15 min); erro definitivo da API (4xx em JSON) falha direto, sem retry | falhas curtas se resolvem dentro da task; indisponibilidades longas, entre tentativas | o pior caso de espera é maior |
 | **Checagem de qualidade após o staging, bloqueando os marts** | dado ruim não chega a quem consome; a falha diz qual regra e traz uma amostra | o staging pode ter o dado ruim até alguém corrigir |
 | **Marts como materialized views + `REFRESH CONCURRENTLY`** | definição versionada, troca atômica, leitura sem bloqueio | mudar a regra exige uma migration nova |
 | **Migrations em SQL puro numerado** (executor de cerca de 100 linhas, com checksum e advisory lock) em vez de Alembic | o pipeline não usa ORM, e SQL é legível na revisão | não há *downgrade*: as mudanças só andam para frente |
@@ -229,16 +230,17 @@ Medido em setembro de 2026, durante o desenvolvimento. Cada item tem tratamento 
 ## Qualidade e testes
 
 - **Checagens por série após o staging:** série sem dados, valores nulos, datas futuras,
-  datas duplicadas e valor fora da faixa plausível (definida no YAML). A falha em qualquer uma
-  falha a task, sem retry.
-- **109 testes**, todos no CI:
-  - **66 unitários do pipeline**, com a API do BCB simulada por `httpx.MockTransport`
+  datas duplicadas, valor fora da faixa plausível e, no dólar, variação acima de 10% entre dois
+  dias seguidos (a maior desde 2000 foi de 9,33%, em outubro de 2008). Faixas e limites ficam no
+  YAML. A falha em qualquer uma falha a task, sem retry.
+- **118 testes**, todos no CI:
+  - **71 unitários do pipeline**, com a API do BCB simulada por `httpx.MockTransport`
     (sem rede);
-  - **25 de integração do pipeline em Postgres real.** Cada sessão cria um banco descartável,
+  - **28 de integração do pipeline em Postgres real.** Cada sessão cria um banco descartável,
     aplica as migrations reais e o apaga no fim. Cobrem loader, marts com valores calculados
     à mão, permissões do usuário da API e um teste de ponta a ponta mostrando que a segunda
     execução não duplica nada;
-  - **18 da API**, contra o schema real do warehouse.
+  - **19 da API**, contra o schema real do warehouse.
 - **CI** ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) com três jobs: pre-commit
   (ruff, YAML, TOML, chaves privadas) e `docker compose config`; pipeline com `postgres:17`
   de serviço e a versão do Airflow lida do `Dockerfile`; e API.
@@ -269,10 +271,13 @@ bcb-indicadores-pipeline/
   frescor por série).
 - **Lock de dependências** (por exemplo, `uv.lock`) e build das imagens no CI, com publicação
   no GHCR.
-- **Runner fixo no CI** (`ubuntu-24.04`): o `ubuntu-latest` muda de versão em outubro de 2026.
 - **API:** cache HTTP (`ETag`/`Cache-Control`), já que os dados mudam uma vez por dia, e um
   limite de requisições compartilhado entre os workers (Redis), em vez de um por processo.
 - **Mais indicadores:** IGP-M, PIB mensal e juro real (Selic menos IPCA em 12 meses) como
   mart.
 - **Deploy** em nuvem com o Postgres gerenciado e o Airflow em Kubernetes ou num serviço
   gerenciado.
+
+## Licença
+
+[MIT](LICENSE).
