@@ -54,20 +54,33 @@ _CHECKS: dict[str, str] = {
         SELECT data, valor FROM staging.serie_valor
          WHERE serie_id = %(serie_id)s AND (valor < %(minimo)s OR valor > %(maximo)s)
     """,
+    # Pega valor corrompido que ainda cai dentro da faixa (5.22 -> 6.22, por exemplo).
+    "variacao_brusca": """
+        SELECT data, anterior, valor, round((valor / anterior - 1) * 100, 2) AS variacao_pct
+          FROM (SELECT data, valor, lag(valor) OVER (ORDER BY data) AS anterior
+                  FROM staging.serie_valor
+                 WHERE serie_id = %(serie_id)s) v
+         WHERE anterior <> 0 AND abs(valor / anterior - 1) * 100 > %(variacao_max_pct)s
+    """,
 }
+
+# Checagens que dependem de um parâmetro opcional do YAML.
+_OPCIONAIS: dict[str, str] = {"fora_da_faixa": "minimo", "variacao_brusca": "variacao_max_pct"}
 
 
 def executar_checagens(
     conn: psycopg.Connection, serie: SerieConfig, hoje: date
 ) -> list[CheckResult]:
-    """Roda todas as checagens da série. `fora_da_faixa` só roda se a série tem `faixa`."""
+    """Roda as checagens da série. As opcionais só rodam se a série configura o parâmetro."""
     params: dict[str, Any] = {"serie_id": serie.codigo, "hoje": hoje}
     if serie.faixa is not None:
         params |= {"minimo": serie.faixa.minimo, "maximo": serie.faixa.maximo}
+    if serie.variacao_max_pct is not None:
+        params["variacao_max_pct"] = serie.variacao_max_pct
 
     resultados = []
     for nome, consulta in _CHECKS.items():
-        if nome == "fora_da_faixa" and serie.faixa is None:
+        if nome in _OPCIONAIS and _OPCIONAIS[nome] not in params:
             continue
         # Conta tudo, mas traz só uma amostra para o log.
         total = conn.execute(f"SELECT count(*) FROM ({consulta}) v", params).fetchone()

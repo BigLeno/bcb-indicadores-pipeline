@@ -34,6 +34,20 @@ def test_faixa_is_parsed_as_exact_decimal(tmp_path: Path) -> None:
     assert serie.faixa == Faixa(Decimal("0"), Decimal("0.15"))
 
 
+def test_variacao_max_pct_is_optional_and_exact(tmp_path: Path) -> None:
+    path = _write(
+        tmp_path,
+        "carga_inicial: 2000-01-01\nseries:\n"
+        "  - {codigo: 1, nome: a, periodicidade: diaria, unidade: x, variacao_max_pct: 7.5}\n"
+        "  - {codigo: 2, nome: b, periodicidade: diaria, unidade: x}",
+    )
+
+    com, sem = load_series(path)
+
+    assert com.variacao_max_pct == Decimal("7.5")
+    assert sem.variacao_max_pct is None
+
+
 def test_serie_inherits_carga_inicial_unless_overridden(tmp_path: Path) -> None:
     path = _write(
         tmp_path,
@@ -78,6 +92,16 @@ series:
             "  - {codigo: 1, nome: a, periodicidade: diaria, unidade: x, faixa: [1, 2]}",
             "faixa",
         ),
+        (
+            "carga_inicial: 2000-01-01\nseries:\n"
+            "  - {codigo: 1, nome: a, periodicidade: diaria, unidade: x, variacao_max_pct: 0}",
+            "maior que zero",
+        ),
+        (
+            "carga_inicial: 2000-01-01\nseries:\n"
+            "  - {codigo: 1, nome: a, periodicidade: diaria, unidade: x, variacao_max_pct: abc}",
+            "deve ser um número",
+        ),
     ],
 )
 def test_invalid_config_is_rejected(tmp_path: Path, conteudo: str, erro: str) -> None:
@@ -85,8 +109,11 @@ def test_invalid_config_is_rejected(tmp_path: Path, conteudo: str, erro: str) ->
         load_series(_write(tmp_path, conteudo))
 
 
-@pytest.mark.parametrize("faixa", [None, Faixa(Decimal("0"), Decimal("0.15"))])
-def test_serie_round_trips_through_xcom_dict(faixa: Faixa | None) -> None:
-    serie = SerieConfig(11, "Selic", "diaria", "% a.d.", date(2000, 1, 1), faixa)
+@pytest.mark.parametrize(
+    ("faixa", "variacao"),
+    [(None, None), (Faixa(Decimal("0"), Decimal("0.15")), Decimal("10"))],
+)
+def test_serie_round_trips_through_xcom_dict(faixa: Faixa | None, variacao: Decimal | None) -> None:
+    serie = SerieConfig(11, "Selic", "diaria", "% a.d.", date(2000, 1, 1), faixa, variacao)
 
     assert SerieConfig.from_dict(serie.to_dict()) == serie

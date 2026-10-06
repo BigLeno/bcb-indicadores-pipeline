@@ -10,7 +10,7 @@ from bcb_pipeline.transform import Observacao
 
 HOJE = date(2026, 9, 30)
 SERIE = SerieConfig(
-    1, "Dólar", "diaria", "R$/US$", date(2000, 1, 1), Faixa(Decimal(1), Decimal(10))
+    1, "Dólar", "diaria", "R$/US$", date(2000, 1, 1), Faixa(Decimal(1), Decimal(10)), Decimal(10)
 )
 
 
@@ -35,6 +35,7 @@ def test_clean_series_passes_every_check(conn: psycopg.Connection) -> None:
         "datas_futuras",
         "datas_duplicadas",
         "fora_da_faixa",
+        "variacao_brusca",
     }
     quality.exigir_aprovacao(SERIE, resultados)
 
@@ -68,3 +69,28 @@ def test_range_check_is_skipped_without_faixa(conn: psycopg.Connection) -> None:
     _carregar(conn, ("2026-09-30", "999"))
 
     assert "fora_da_faixa" not in _violacoes(conn, sem_faixa)
+
+
+def test_abrupt_change_inside_range_fails(conn: psycopg.Connection) -> None:
+    # 5.22 -> 6.22 está dentro da faixa [1, 10], mas sobe 19% num dia; a volta cai 16%.
+    _carregar(conn, ("2026-09-28", "5.22"), ("2026-09-29", "6.22"), ("2026-09-30", "5.23"))
+
+    resultado = next(
+        r for r in quality.executar_checagens(conn, SERIE, HOJE) if r.nome == "variacao_brusca"
+    )
+
+    assert resultado.violacoes == 2
+    assert resultado.amostra[0][0] == date(2026, 9, 29)
+
+
+def test_change_at_the_limit_passes(conn: psycopg.Connection) -> None:
+    _carregar(conn, ("2026-09-29", "5.00"), ("2026-09-30", "5.50"))  # exatamente 10%
+
+    assert _violacoes(conn)["variacao_brusca"] == 0
+
+
+def test_change_check_is_skipped_without_limit(conn: psycopg.Connection) -> None:
+    sem_limite = SerieConfig(1, "Dólar", "diaria", "R$/US$", date(2000, 1, 1))
+    _carregar(conn, ("2026-09-29", "2"), ("2026-09-30", "9"))
+
+    assert "variacao_brusca" not in _violacoes(conn, sem_limite)

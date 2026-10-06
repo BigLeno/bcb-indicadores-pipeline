@@ -38,6 +38,9 @@ class SerieConfig:
     unidade: str
     inicio: date
     faixa: Faixa | None = None
+    # Variação máxima plausível entre duas observações seguidas, em % (só faz sentido
+    # para preços; em taxas, a variação relativa é grande sempre que o patamar muda).
+    variacao_max_pct: Decimal | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Versão serializável (XCom do Airflow só aceita tipos simples)."""
@@ -50,12 +53,16 @@ class SerieConfig:
             "faixa": (
                 [str(self.faixa.minimo), str(self.faixa.maximo)] if self.faixa is not None else None
             ),
+            "variacao_max_pct": (
+                str(self.variacao_max_pct) if self.variacao_max_pct is not None else None
+            ),
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SerieConfig:
         """Inverso de `to_dict`."""
         faixa = data.get("faixa")
+        variacao = data.get("variacao_max_pct")
         return cls(
             codigo=data["codigo"],
             nome=data["nome"],
@@ -63,6 +70,7 @@ class SerieConfig:
             unidade=data["unidade"],
             inicio=date.fromisoformat(data["inicio"]),
             faixa=Faixa(Decimal(faixa[0]), Decimal(faixa[1])) if faixa else None,
+            variacao_max_pct=Decimal(variacao) if variacao is not None else None,
         )
 
 
@@ -77,6 +85,18 @@ def _parse_faixa(raw: Any, codigo: Any) -> Faixa | None:
     if faixa.minimo >= faixa.maximo:
         raise ConfigError(f"`faixa` da série {codigo}: min deve ser menor que max")
     return faixa
+
+
+def _parse_variacao(raw: Any, codigo: Any) -> Decimal | None:
+    if raw is None:
+        return None
+    try:
+        variacao = Decimal(str(raw))
+    except InvalidOperation as exc:
+        raise ConfigError(f"`variacao_max_pct` da série {codigo} deve ser um número") from exc
+    if not variacao.is_finite() or variacao <= 0:
+        raise ConfigError(f"`variacao_max_pct` da série {codigo} deve ser maior que zero")
+    return variacao
 
 
 def _parse_serie(raw: dict[str, Any], carga_inicial: date) -> SerieConfig:
@@ -97,6 +117,7 @@ def _parse_serie(raw: dict[str, Any], carga_inicial: date) -> SerieConfig:
         unidade=str(raw["unidade"]),
         inicio=inicio,
         faixa=_parse_faixa(raw.get("faixa"), raw["codigo"]),
+        variacao_max_pct=_parse_variacao(raw.get("variacao_max_pct"), raw["codigo"]),
     )
 
 

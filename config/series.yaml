@@ -7,6 +7,8 @@
 carga_inicial: 2000-01-01
 
 # `faixa`: valores plausíveis para a checagem de qualidade. Um valor fora dela falha a DAG.
+# `variacao_max_pct` (opcional): variação máxima entre duas observações seguidas, em %.
+# Só para preços: em taxas (Selic, CDI), a variação relativa é grande a cada decisão do Copom.
 # As faixas foram calibradas para o período desde 2000. Ao recuar `carga_inicial`
 # (por exemplo, para os anos 1990, de inflação alta), revise-as.
 
@@ -40,3 +42,5 @@ series:
     periodicidade: diaria
     unidade: "R$/US$"
     faixa: {min: 1, max: 10}
+    # A maior variação diária desde 2000 foi de 9,33% (08/10/2008).
+    variacao_max_pct: 10
